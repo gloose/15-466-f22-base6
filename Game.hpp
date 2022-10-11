@@ -5,6 +5,7 @@
 #include <string>
 #include <list>
 #include <random>
+#include <array>
 
 struct Connection;
 
@@ -24,11 +25,21 @@ struct Button {
 	bool pressed = false; //is the button pressed now
 };
 
+enum Hand {
+	None,
+	Rock,
+	Paper,
+	Scissors
+};
+
 //state of one player in the game:
 struct Player {
 	//player inputs (sent from client):
 	struct Controls {
-		Button left, right, up, down, jump;
+		//Button left, right, up, down, jump;
+		std::array<Button, 4> left_buttons;
+		std::array<Button, 4> right_buttons;
+		//Button l1, l2, l3, l4, l5, r1, r2, r3, r4, r5;
 
 		void send_controls_message(Connection *connection) const;
 
@@ -38,12 +49,14 @@ struct Player {
 		bool recv_controls_message(Connection *connection);
 	} controls;
 
-	//player state (sent from server):
-	glm::vec2 position = glm::vec2(0.0f, 0.0f);
-	glm::vec2 velocity = glm::vec2(0.0f, 0.0f);
-
-	glm::vec3 color = glm::vec3(1.0f, 1.0f, 1.0f);
-	std::string name = "";
+	glm::u8vec4 color = glm::u8vec4(0x00, 0x00, 0x00, 0x00);
+	Hand left_hand = Hand::Paper;
+	Hand right_hand = Hand::Paper;
+	int8_t index;
+	const float max_stamina = 16;
+	const float stamina_recovery = 4;
+	float stamina = max_stamina;
+	bool win = false;
 };
 
 struct Game {
@@ -53,6 +66,13 @@ struct Game {
 
 	std::mt19937 mt; //used for spawning players
 	uint32_t next_player_number = 1; //used for naming players
+
+	glm::vec3 bary_score = glm::vec3(1.f / 3.f, 1.f / 3.f, 1.f / 3.f);
+	float score_point_speed = 0.3f;
+
+	bool over = false;
+	float restart_timer = 0;
+	float restart_duration = 3;
 
 	Game();
 
@@ -64,13 +84,15 @@ struct Game {
 	inline static constexpr float Tick = 1.0f / 30.0f;
 
 	//arena size:
-	inline static constexpr glm::vec2 ArenaMin = glm::vec2(-0.75f, -1.0f);
-	inline static constexpr glm::vec2 ArenaMax = glm::vec2( 0.75f,  1.0f);
+	inline static constexpr glm::vec2 ArenaMin = glm::vec2(-1.f, -1.0f);
+	inline static constexpr glm::vec2 ArenaMax = glm::vec2( 1.f,  1.0f);
 
 	//player constants:
 	inline static constexpr float PlayerRadius = 0.06f;
 	inline static constexpr float PlayerSpeed = 2.0f;
 	inline static constexpr float PlayerAccelHalflife = 0.25f;
+
+	inline static constexpr float triangle_radius = 0.8f;
 	
 
 	//---- communication helpers ----

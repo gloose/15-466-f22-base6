@@ -63,9 +63,9 @@ int main(int argc, char **argv) {
 
 	//create window:
 	SDL_Window *window = SDL_CreateWindow(
-		"gp22 game6: multiplayer", //TODO: remember to set a title for your game!
+		"RPS Showdown", //TODO: remember to set a title for your game!
 		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-		1280, 720, //TODO: modify window size if you'd like
+		720, 720, //TODO: modify window size if you'd like
 		SDL_WINDOW_OPENGL
 		| SDL_WINDOW_RESIZABLE //uncomment to allow resizing
 		| SDL_WINDOW_ALLOW_HIGHDPI //uncomment for full resolution on high-DPI screens
@@ -73,6 +73,7 @@ int main(int argc, char **argv) {
 
 	//prevent exceedingly tiny windows when resizing:
 	SDL_SetWindowMinimumSize(window,100,100);
+	SDL_SetWindowResizable(window, SDL_bool(false));
 
 	if (!window) {
 		std::cerr << "Error creating SDL window: " << SDL_GetError() << std::endl;

@@ -1,3 +1,5 @@
+#define _USE_MATH_DEFINES
+
 #include "Game.hpp"
 
 #include "Connection.hpp"
@@ -12,7 +14,7 @@ void Player::Controls::send_controls_message(Connection *connection_) const {
 	assert(connection_);
 	auto &connection = *connection_;
 
-	uint32_t size = 5;
+	uint32_t size = 8;
 	connection.send(Message::C2S_Controls);
 	connection.send(uint8_t(size));
 	connection.send(uint8_t(size >> 8));
@@ -25,11 +27,12 @@ void Player::Controls::send_controls_message(Connection *connection_) const {
 		connection.send(uint8_t( (b.pressed ? 0x80 : 0x00) | (b.downs & 0x7f) ) );
 	};
 
-	send_button(left);
-	send_button(right);
-	send_button(up);
-	send_button(down);
-	send_button(jump);
+	for (size_t i = 0; i < left_buttons.size(); i++) {
+		send_button(left_buttons[i]);
+	}
+	for (size_t i = 0; i < right_buttons.size(); i++) {
+		send_button(right_buttons[i]);
+	}
 }
 
 bool Player::Controls::recv_controls_message(Connection *connection_) {
@@ -44,7 +47,7 @@ bool Player::Controls::recv_controls_message(Connection *connection_) {
 	uint32_t size = (uint32_t(recv_buffer[3]) << 16)
 	              | (uint32_t(recv_buffer[2]) << 8)
 	              |  uint32_t(recv_buffer[1]);
-	if (size != 5) throw std::runtime_error("Controls message with size " + std::to_string(size) + " != 5!");
+	if (size != 8) throw std::runtime_error("Controls message with size " + std::to_string(size) + " != 8!");
 	
 	//expecting complete message:
 	if (recv_buffer.size() < 4 + size) return false;
@@ -59,11 +62,12 @@ bool Player::Controls::recv_controls_message(Connection *connection_) {
 		button->downs = uint8_t(d);
 	};
 
-	recv_button(recv_buffer[4+0], &left);
-	recv_button(recv_buffer[4+1], &right);
-	recv_button(recv_buffer[4+2], &up);
-	recv_button(recv_buffer[4+3], &down);
-	recv_button(recv_buffer[4+4], &jump);
+	for (size_t i = 0; i < left_buttons.size(); i++) {
+		recv_button(recv_buffer[4 + i], &left_buttons[i]);
+	}
+	for (size_t i = 0; i < right_buttons.size(); i++) {
+		recv_button(recv_buffer[4 + left_buttons.size() + i], &right_buttons[i]);
+	}
 
 	//delete message from buffer:
 	recv_buffer.erase(recv_buffer.begin(), recv_buffer.begin() + 4 + size);
@@ -81,18 +85,14 @@ Player *Game::spawn_player() {
 	players.emplace_back();
 	Player &player = players.back();
 
-	//random point in the middle area of the arena:
-	player.position.x = glm::mix(ArenaMin.x + 2.0f * PlayerRadius, ArenaMax.x - 2.0f * PlayerRadius, 0.4f + 0.2f * mt() / float(mt.max()));
-	player.position.y = glm::mix(ArenaMin.y + 2.0f * PlayerRadius, ArenaMax.y - 2.0f * PlayerRadius, 0.4f + 0.2f * mt() / float(mt.max()));
+	player.index = (uint8_t)players.size() - 1;
 
-	do {
-		player.color.r = mt() / float(mt.max());
-		player.color.g = mt() / float(mt.max());
-		player.color.b = mt() / float(mt.max());
-	} while (player.color == glm::vec3(0.0f));
-	player.color = glm::normalize(player.color);
-
-	player.name = "Player " + std::to_string(next_player_number++);
+	std::array<glm::u8vec4, 3> colors = {
+		glm::u8vec4(0xff, 0x00, 0x88, 0xff),
+		glm::u8vec4(0x00, 0xff, 0xee, 0xff),
+		glm::u8vec4(0xff, 0xbb, 0x00, 0xff)
+	};
+	player.color = colors[player.index];
 
 	return &player;
 }
@@ -110,81 +110,122 @@ void Game::remove_player(Player *player) {
 }
 
 void Game::update(float elapsed) {
-	//position/velocity update:
-	for (auto &p : players) {
-		glm::vec2 dir = glm::vec2(0.0f, 0.0f);
-		if (p.controls.left.pressed) dir.x -= 1.0f;
-		if (p.controls.right.pressed) dir.x += 1.0f;
-		if (p.controls.down.pressed) dir.y -= 1.0f;
-		if (p.controls.up.pressed) dir.y += 1.0f;
+	// Set hand state for all players
+	for (auto& p : players) {
+		// Helper to get the hand position for a given array of button presses
+		auto getHand = [&](std::array<Button, 4> buttons) -> Hand {
+			if (p.stamina <= 0) {
+				return Hand::None;
+			}
+			if (buttons[0].pressed && buttons[1].pressed && buttons[2].pressed && buttons[3].pressed) {
+				return Hand::Rock;
+			}
+			if (!buttons[0].pressed && !buttons[1].pressed && !buttons[2].pressed && !buttons[3].pressed) {
+				return Hand::Paper;
+			}
+			if (!buttons[0].pressed && !buttons[1].pressed && buttons[2].pressed && buttons[3].pressed) {
+				return Hand::Scissors;
+			}
+			return Hand::None;
+		};
 
-		if (dir == glm::vec2(0.0f)) {
-			//no inputs: just drift to a stop
-			float amt = 1.0f - std::pow(0.5f, elapsed / (PlayerAccelHalflife * 2.0f));
-			p.velocity = glm::mix(p.velocity, glm::vec2(0.0f,0.0f), amt);
-		} else {
-			//inputs: tween velocity to target direction
-			dir = glm::normalize(dir);
+		// Set player hands
+		p.left_hand = getHand(p.controls.left_buttons);
+		p.right_hand = getHand(p.controls.right_buttons);
+	}
 
-			float amt = 1.0f - std::pow(0.5f, elapsed / PlayerAccelHalflife);
+	// Perform normal game updates only if there are three players and the game is not over
+	if (players.size() == 3 && !over) {
+		for (auto& p : players) {
+			// Helper to determine whether hand 1 beats hand 2
+			auto winning = [](Hand h1, Hand h2) -> bool {
+				return h2 == Hand::None ||
+				      (h1 == Hand::Rock && h2 == Hand::Scissors) ||
+				      (h1 == Hand::Paper && h2 == Hand::Rock) ||
+				      (h1 == Hand::Scissors && h2 == Hand::Paper);
+			};
 
-			//accelerate along velocity (if not fast enough):
-			float along = glm::dot(p.velocity, dir);
-			if (along < PlayerSpeed) {
-				along = glm::mix(along, PlayerSpeed, amt);
+			// Get pointers to the players on either side of this one
+			Player* left_player = nullptr;
+			Player* right_player = nullptr;
+			for (auto& p2 : players) {
+				if (p2.index == (players.size() + p.index - 1) % players.size()) {
+					left_player = &p2;
+				}
+				if (p2.index == (players.size() + p.index + 1) % players.size()) {
+					right_player = &p2;
+				}
+			}
+			assert(left_player != nullptr && right_player != nullptr && "Missing player");
+
+			// For each player that I'm beating, increase my barycentric score and decrease theirs
+			if (winning(p.left_hand, left_player->right_hand)) {
+				bary_score[p.index] += elapsed * score_point_speed;
+				bary_score[left_player->index] -= elapsed * score_point_speed;
+			}
+			if (winning(p.right_hand, right_player->left_hand)) {
+				bary_score[p.index] += elapsed * score_point_speed;
+				bary_score[right_player->index] -= elapsed * score_point_speed;
 			}
 
-			//damp perpendicular velocity:
-			float perp = glm::dot(p.velocity, glm::vec2(-dir.y, dir.x));
-			perp = glm::mix(perp, 0.0f, amt);
+			// Expend stamina based on key presses
+			if (p.stamina > 0) {
+				for (size_t i = 0; i < p.controls.left_buttons.size(); i++) {
+					p.stamina -= p.controls.left_buttons[i].downs;
+				}
+				for (size_t i = 0; i < p.controls.right_buttons.size(); i++) {
+					p.stamina -= p.controls.right_buttons[i].downs;
+				}
+			}
 
-			p.velocity = dir * along + glm::vec2(-dir.y, dir.x) * perp;
+			// Recover stamina
+			p.stamina += p.stamina_recovery * elapsed;
+			p.stamina = std::min(p.stamina, p.max_stamina);
 		}
-		p.position += p.velocity * elapsed;
 
-		//reset 'downs' since controls have been handled:
-		p.controls.left.downs = 0;
-		p.controls.right.downs = 0;
-		p.controls.up.downs = 0;
-		p.controls.down.downs = 0;
-		p.controls.jump.downs = 0;
-	}
+		// Check if the score point has left the triangle and the game is over
+		if (bary_score.x < 0 || bary_score.y < 0 || bary_score.z < 0) {
+			// Find the winning player
+			float max_bary = 0;
+			int8_t win_index = 0;
+			for (int8_t i = 0; i < 3; i++) {
+				if (bary_score[i] > max_bary) {
+					max_bary = bary_score[i];
+					win_index = i;
+				}
+			}
+			
+			// Set that player's "win" to true
+			for (auto& p : players) {
+				p.win = p.index == win_index;
+			}
 
-	//collision resolution:
-	for (auto &p1 : players) {
-		//player/player collisions:
-		for (auto &p2 : players) {
-			if (&p1 == &p2) break;
-			glm::vec2 p12 = p2.position - p1.position;
-			float len2 = glm::length2(p12);
-			if (len2 > (2.0f * PlayerRadius) * (2.0f * PlayerRadius)) continue;
-			if (len2 == 0.0f) continue;
-			glm::vec2 dir = p12 / std::sqrt(len2);
-			//mirror velocity to be in separating direction:
-			glm::vec2 v12 = p2.velocity - p1.velocity;
-			glm::vec2 delta_v12 = dir * glm::max(0.0f, -1.75f * glm::dot(dir, v12));
-			p2.velocity += 0.5f * delta_v12;
-			p1.velocity -= 0.5f * delta_v12;
+			// Game is over
+			over = true;
 		}
-		//player/arena collisions:
-		if (p1.position.x < ArenaMin.x + PlayerRadius) {
-			p1.position.x = ArenaMin.x + PlayerRadius;
-			p1.velocity.x = std::abs(p1.velocity.x);
-		}
-		if (p1.position.x > ArenaMax.x - PlayerRadius) {
-			p1.position.x = ArenaMax.x - PlayerRadius;
-			p1.velocity.x =-std::abs(p1.velocity.x);
-		}
-		if (p1.position.y < ArenaMin.y + PlayerRadius) {
-			p1.position.y = ArenaMin.y + PlayerRadius;
-			p1.velocity.y = std::abs(p1.velocity.y);
-		}
-		if (p1.position.y > ArenaMax.y - PlayerRadius) {
-			p1.position.y = ArenaMax.y - PlayerRadius;
-			p1.velocity.y =-std::abs(p1.velocity.y);
+	} else if (over) {
+		// After a certain time has elapsed, restart the game
+		restart_timer += elapsed;
+		if (restart_timer > restart_duration) {
+			restart_timer = 0;
+			over = false;
+			bary_score = glm::vec3(1.f / 3.f, 1.f / 3.f, 1.f / 3.f);
+			for (auto& p : players) {
+				p.stamina = p.max_stamina;
+			}
 		}
 	}
-
+	
+	// Reset 'downs' since controls have been handled:
+	for (auto& p : players) {
+		
+		for (size_t i = 0; i < p.controls.left_buttons.size(); i++) {
+			p.controls.left_buttons[i].downs = 0;
+		}
+		for (size_t i = 0; i < p.controls.right_buttons.size(); i++) {
+			p.controls.right_buttons[i].downs = 0;
+		}
+	}
 }
 
 
@@ -200,17 +241,18 @@ void Game::send_state_message(Connection *connection_, Player *connection_player
 	size_t mark = connection.send_buffer.size(); //keep track of this position in the buffer
 
 
+	connection.send(bary_score);
+	connection.send(over);
+
 	//send player info helper:
 	auto send_player = [&](Player const &player) {
-		connection.send(player.position);
-		connection.send(player.velocity);
+		//connection.send(player.position);
 		connection.send(player.color);
-	
-		//NOTE: can't just 'send(name)' because player.name is not plain-old-data type.
-		//effectively: truncates player name to 255 chars
-		uint8_t len = uint8_t(std::min< size_t >(255, player.name.size()));
-		connection.send(len);
-		connection.send_buffer.insert(connection.send_buffer.end(), player.name.begin(), player.name.begin() + len);
+		connection.send(player.left_hand);
+		connection.send(player.right_hand);
+		connection.send(player.index);
+		connection.send(player.stamina);
+		connection.send(player.win);
 	};
 
 	//player count:
@@ -251,24 +293,21 @@ bool Game::recv_state_message(Connection *connection_) {
 		at += sizeof(*val);
 	};
 
+	read(&bary_score);
+	read(&over);
+
 	players.clear();
 	uint8_t player_count;
 	read(&player_count);
 	for (uint8_t i = 0; i < player_count; ++i) {
 		players.emplace_back();
 		Player &player = players.back();
-		read(&player.position);
-		read(&player.velocity);
 		read(&player.color);
-		uint8_t name_len;
-		read(&name_len);
-		//n.b. would probably be more efficient to directly copy from recv_buffer, but I think this is clearer:
-		player.name = "";
-		for (uint8_t n = 0; n < name_len; ++n) {
-			char c;
-			read(&c);
-			player.name += c;
-		}
+		read(&player.left_hand);
+		read(&player.right_hand);
+		read(&player.index);
+		read(&player.stamina);
+		read(&player.win);
 	}
 
 	if (at != size) throw std::runtime_error("Trailing data in state message.");

@@ -25,7 +25,7 @@ const NEST_LIBS = `../nest-libs/${maek.OS}`;
 //set compile flags (these can also be overridden per-task using the "options" parameter):
 if (maek.OS === "windows") {
 	maek.options.CPPFlags.push(
-		`/O2`, //optimize
+		//`/O2`, //optimize
 		//include paths for nest libraries:
 		`/I${NEST_LIBS}/SDL2/include`,
 		`/I${NEST_LIBS}/glm/include`,
@@ -118,6 +118,7 @@ let copies = [
 ];
 if (maek.OS === 'windows') {
 	copies.push( maek.COPY(`${NEST_LIBS}/SDL2/dist/SDL2.dll`, `dist/SDL2.dll`) );
+	copies.push( maek.COPY(`${NEST_LIBS}/SDL2/dist/SDL2.dll`, `SDL2.dll`) );
 }
 
 //call rules on the maek object to specify tasks.
