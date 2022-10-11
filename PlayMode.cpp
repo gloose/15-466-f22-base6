@@ -403,10 +403,10 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			Player* left_player = nullptr;
 			Player* right_player = nullptr;
 			for (auto& p2 : game.players) {
-				if (p2.index == (game.players.size() + player.index - 1) % game.players.size()) {
+				if (p2.index == (int8_t)((game.players.size() + player.index - 1) % game.players.size())) {
 					left_player = &p2;
 				}
-				if (p2.index == (game.players.size() + player.index + 1) % game.players.size()) {
+				if (p2.index == (int8_t)((game.players.size() + player.index + 1) % game.players.size())) {
 					right_player = &p2;
 				}
 			}
@@ -452,6 +452,8 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 							return Char_Paper;
 						case Scissors:
 							return Char_Scissors;
+						case None:
+							return Char_Space;
 					}
 					return Char_Space;
 				};
