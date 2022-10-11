@@ -32,7 +32,7 @@ j, k, l, ; : Press to close the corresponding finger of your right hand
   * All but index and middle finger closed: Scissors
   * Any other configuration: Invalid (loses to everything)
 * At any given moment, your left hand plays against the neighbor on your left, and your right hand plays against the neighbor on your right. For each matchup, the winner's score increases and the loser's score decreases.
-* Player scores are translated to barycentric coordinates for the "score point", which starts in the center. In practice, this means that for each neighbor you are beating at any point in time, the score point moves toward your corner of the triangle and away from theirs.
+* Player scores are translated to barycentric coordinates for the "score point", which starts in the center. In practice, this means that for each neighbor you are beating at any point in time, the score point moves along the line from their corner of the triangle to yours.
 * The game ends when the score point leaves the triangle. The winner is the player whose side of the triangle it ends up in.
 * To prevent random keyboard mashing, each key press temporarily decreases your stamina, represented by a concentric circle in your region. If it drops below zero, your hand position becomes invalid until it recovers.
 
