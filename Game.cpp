@@ -149,10 +149,10 @@ void Game::update(float elapsed) {
 			Player* left_player = nullptr;
 			Player* right_player = nullptr;
 			for (auto& p2 : players) {
-				if (p2.index == (players.size() + p.index - 1) % players.size()) {
+				if (p2.index == (int8_t)((players.size() + p.index - 1) % players.size())) {
 					left_player = &p2;
 				}
-				if (p2.index == (players.size() + p.index + 1) % players.size()) {
+				if (p2.index == (int8_t)((players.size() + p.index + 1) % players.size())) {
 					right_player = &p2;
 				}
 			}
