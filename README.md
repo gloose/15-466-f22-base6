@@ -29,7 +29,7 @@ j, k, l, ; : press to close the corresponding finger of your right hand
 * Each player sits at one corner of the triangle and controls two hands with four fingers each (the thumbs are unused). With your fingers resting on the home row, you can press down on any finger to close it. The combination of open and closed fingers produces a hand position:
   * All fingers closed: Rock
   * All fingers open: Paper
-  * All but index and middle finger close: Scissors
+  * All but index and middle finger closed: Scissors
   * Any other configuration: Invalid (loses to everything)
 * At any given moment, your left hand plays against the neighbor on your left, and your right hand plays against the neighbor on your right. For each matchup, the winner's score increases and the loser's score decreases.
 * Player scores are translated to barycentric coordinates for the "score point", which starts in the center. In practice, this means that for each neighbor you are beating at any point in time, the score point moves toward your corner of the triangle and away from theirs.
