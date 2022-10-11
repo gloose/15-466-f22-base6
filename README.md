@@ -19,6 +19,7 @@ My code only makes slight modifications to the starter networking code, with the
 ### Controls:
 
 a, s, d, f : press to close the corresponding finger of your left hand
+
 j, k, l, ; : press to close the corresponding finger of your right hand
 
 ### Instructions (IMPORTANT)
